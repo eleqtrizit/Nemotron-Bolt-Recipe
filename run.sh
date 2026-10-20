@@ -42,10 +42,11 @@ Options:
   -d, --detach            Run detached; logs via 'docker logs -f vllm'.
   --restart [POLICY]      Docker restart policy: always, unless-stopped, on-failure.
                           Default unless-stopped. Disables --rm (Docker forbids both).
-  --gpu SPEC              Pin GPUs, e.g. "device=1" or "all". Default: all GPUs
-                          (docker run gives NO GPUs unless --gpus is passed).
-  --tp N                  Tensor parallelism. Default: auto -- 2 when the host has
-                          2+ GPUs and no --gpu pin is given, otherwise 1.
+  --gpu SPEC              Pin GPUs, e.g. "device=1". Default: the GPU with the most
+                          free memory (docker gives no GPUs without --gpus, and
+                          "--gpus all" makes a busy cuda:0 the primary).
+  --tp N                  Tensor parallelism. Default 1. TP=2 is NOT supported by
+                          this checkpoint (IQ2_XXS dense weights); opt-in for tests.
   --kv-cache-dtype DTYPE  fp8 (default), bf16, nvfp4. nvfp4 is blocked upstream for
                           this model (see AGENTS.md).
   -h, --help              Show this help.

@@ -14,10 +14,14 @@ Intended to run under llama-swap (therefore `run.sh` stays in the foreground).
 - `entrypoint.sh` — runs `vllm download-kernels`, then execs the CMD.
 - `run.sh` — builds the image, then runs the container (foreground by default).
   Flags: `--port` (default 8080), `-d`, `--restart`, `--gpu`, `--tp`, `--kv-cache-dtype`.
-Tensor-parallelism auto-detection: if the host has 2+ GPUs and no `--gpu` pin is
-given, `run.sh` sets TP=2 and exposes all GPUs; otherwise TP=1. Override with
-`--tp N`. The TP value reaches the server via the `TP` env var, rewritten into
-the CMD by entrypoint.sh (same mechanism as KV_CACHE_DTYPE).
+Tensor parallelism defaults to 1. Auto-TP=2 was tried and reverted (2026-10-20):
+with `--tensor-parallel-size 2` the engine fails at model load with
+`ValueError: IQ2_XXS dense weights require BF16, K256 and N8` — the mixed-
+precision checkpoint's dense/shared-expert weights cannot be sharded. TP=2 stays
+available via `--tp 2` for future checkpoint/kernel updates. The TP value
+reaches the server via the `TP` env var, rewritten into the CMD by
+entrypoint.sh (same mechanism as KV_CACHE_DTYPE). Also note TP=2 needs both
+GPUs free: GPU 0 with >2 GiB already used trips the gpu-memory-utilization check.
 
 ## Usage
 
@@ -44,12 +48,15 @@ docker exec vllm nvidia-smi            # container sees exactly one GPU (device 
 
 ## Key facts / gotchas
 
-- **GPU:** `--gpus all` is passed by default — `docker run` without any
-  `--gpus` flag gives the container NO GPUs (the nvidia runtime must be the
-  daemon default otherwise, and it typically is not). Pin one card with
-  `--gpu "device=1"` (second GPU in nvidia-smi, the 32 GB / 31.36 GiB card the
-  config was tuned for; it appears as `cuda:0` inside the container). The KV
-  cache math below assumes that 32 GB card.
+- **GPU:** by default `run.sh` pins the container to the GPU with the most
+  free memory (`nvidia-smi` query) — docker run without `--gpus` exposes NO
+  GPUs, and `--gpus all` makes a busy cuda:0 the primary (GPU 0 hosts other
+  services on this machine). Override with `--gpu "device=1"`. Historically
+  the serving card is the second GPU (32 GB / 31.36 GiB, `cuda:0` inside the
+  container); the KV cache math below assumes that card.
+- **TP=2 does not work with this checkpoint:** model load fails with
+  `IQ2_XXS dense weights require BF16, K256 and N8` (mixed-precision dense
+  weights can't be sharded). `--tp 2` remains opt-in for future tests.
 - **Context length math:** the ~24GB quantized weights + CUDA graphs leave only
   ~2.6 GiB for KV cache. The original 262144 context needed 2.99 GiB and failed;
   vLLM's own estimate of the max was 175,344. Current values that work:
