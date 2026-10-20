@@ -1,4 +1,4 @@
-# bolt — vLLM NVIDIA Nemotron 3.5 Bolt 74B server
+# vLLM NVIDIA Nemotron 3.5 Bolt 74B w/ Lilicorr Spec Dec
 
 A Dockerized vLLM server for [`nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB`](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB) — a 74B hybrid Mamba/attention transformer quantized to NVFP4 (~24 GB), served with:
 
