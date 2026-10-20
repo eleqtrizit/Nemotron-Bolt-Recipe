@@ -30,8 +30,38 @@ while [[ $# -gt 0 ]]; do
       if [[ "$1" == *=* ]]; then KV_CACHE_DTYPE="${1#*=}"; else KV_CACHE_DTYPE="$2"; shift; fi
       shift
       ;;
+    -h|--help)
+      cat <<USAGE
+Usage: ./run.sh [OPTIONS]
+
+Build the bolt-vllm-nemotron image and serve
+nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB with b12x + FlashInfer + dflash.
+
+Options:
+  --port N                Host port to expose (default: 8080); maps to vLLM port 8000.
+  -d, --detach            Run detached; logs via 'docker logs -f vllm'.
+  --restart [POLICY]      Docker restart policy: always, unless-stopped, on-failure.
+                          Default unless-stopped. Disables --rm (Docker forbids both).
+  --gpu SPEC              Pin GPUs, e.g. "device=1" or "all". Default: no --gpus flag
+                          (container sees all GPUs).
+  --tp N                  Tensor parallelism. Default: auto -- 2 when the host has
+                          2+ GPUs and no --gpu pin is given, otherwise 1.
+  --kv-cache-dtype DTYPE  fp8 (default), bf16, nvfp4. nvfp4 is blocked upstream for
+                          this model (see AGENTS.md).
+  -h, --help              Show this help.
+
+Examples:
+  ./run.sh                          # foreground, port 8080, TP auto-detected
+  ./run.sh --port 9000              # different host port
+  ./run.sh --gpu "device=1"         # pin to second GPU, TP=1
+  ./run.sh -d --restart always      # detached, restart on crash and daemon boot
+  ./run.sh --kv-cache-dtype bf16    # full-precision KV (needs lower max-model-len)
+USAGE
+      exit 0
+      ;;
     *)
-      echo "Usage: $0 [--port N] [-d] [--restart [always|unless-stopped|on-failure]] [--gpu "device=1"] [--tp N] [--kv-cache-dtype fp16|bf16|fp8|nvfp4]" >&2
+      echo "Unknown option: $1" >&2
+      echo "Run './run.sh --help' for usage." >&2
       exit 1
       ;;
   esac
