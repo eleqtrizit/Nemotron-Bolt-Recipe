@@ -67,6 +67,36 @@ curl http://localhost:8080/v1/chat/completions \
   }'
 ```
 
+## Benchmarks (RTX 5090, single GPU, concurrency 1)
+
+Measured with the default config (fp8 KV cache + FlashInfer + dflash speculative
+decoding). `tok/s` is end-to-end generation speed; `prefill tok/s` is prompt
+processing throughput.
+
+| Context | Task | Prompt tok | Gen tok | Prefill tok/s | tok/s |
+|---------|------|-----------:|--------:|--------------:|------:|
+| 2k | code | 1,640 | 1,676 | 5,463 | 535 |
+| 2k | prose | 1,644 | 1,723 | 5,267 | 345 |
+| 8k | code | 6,448 | 1,445 | 6,604 | 535 |
+| 8k | prose | 6,452 | 972 | 6,612 | 301 |
+| 32k | code | 25,681 | 2,048 | 6,974 | 551 |
+| 32k | prose | 25,686 | 1,934 | 6,963 | 352 |
+| 64k | code | 51,326 | 1,553 | 6,623 | 507 |
+| 64k | prose | 51,331 | 1,263 | 6,574 | 294 |
+| 128k | code | 102,616 | 2,048 | 5,890 | 526 |
+| 128k | prose | 102,620 | 853 | 5,866 | 290 |
+| 200k | code | 160,315 | 2,048 | 5,240 | 418 |
+| 200k | prose | 160,321 | 1,373 | 5,222 | 263 |
+
+Rough takeaways:
+- ~300–550 tok/s generation at short/medium context; dflash speculative decoding
+  makes code generation notably faster (~1.5–2x) than prose since code drafts
+  accept more often.
+- Prefill holds ~5,200–7,000 prompt tok/s up to 128k, degrading mildly at 200k
+  (still >5,000).
+- Generation speed degrades gracefully with context: only ~20% off at 200k
+  versus 2k.
+
 ## Architecture
 
 | File | Purpose |
