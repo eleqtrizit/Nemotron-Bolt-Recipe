@@ -93,11 +93,7 @@ RUN_ARGS=(docker run --name "$NAME"
   -e KV_CACHE_DTYPE="$KV_CACHE_DTYPE"
   -e TP="$TP")
 
-if [[ -n "$GPU" ]]; then
-  RUN_ARGS+=(--gpus "\"$GPU\"")
-else
-  RUN_ARGS+=(--gpus all)
-fi
+RUN_ARGS+=(--gpus "$GPU")
 
 if [[ -n "${RESTART:-}" ]]; then
   RUN_ARGS+=(--restart "$RESTART")
