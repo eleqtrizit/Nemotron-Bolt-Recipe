@@ -70,6 +70,43 @@ done
 # Default: expose all GPUs. docker run gives NO GPUs without --gpus.
 GPU="${GPU:-all}"
 
+# Pre-flight: refuse to start when the serving GPU(s) can't satisfy the
+# gpu-memory-utilization baked into the Dockerfile (default 0.96), instead of
+# dying 2 minutes into engine init with a cryptic ValueError.
+PREFLIGHT_UTIL=$(grep -oE 'gpu-memory-utilization", "[0-9.]+' Dockerfile | rg -o '[0-9.]+$')
+PREFLIGHT_UTIL="${PREFLIGHT_UTIL:-0.96}"
+preflight_gpu_memory() {
+  command -v nvidia-smi >/dev/null 2>&1 || return 0
+  [[ "$GPU" == "all" ]] && GPU_LIST=$(nvidia-smi -L 2>/dev/null | rg -o -P 'GPU \K[0-9]+' | tr '
+' ',' | sed 's/,$//') || GPU_LIST="${GPU#device=}"
+  [[ -z "$GPU_LIST" ]] && return 0
+  # TP=1 only uses the first visible GPU as cuda:0; TP>1 uses them all
+  [[ "$TP" -ge 2 ]] || GPU_LIST="${GPU_LIST%%,*}"
+  local idx total free need pct name
+  for idx in ${GPU_LIST//,/ }; do
+    total=$(nvidia-smi -i "$idx" --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | tr -d ' ')
+    free=$(nvidia-smi -i "$idx" --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | tr -d ' ')
+    [[ -z "$total" || -z "$free" ]] && continue
+    need=$(python3 -c "print(int($total * $PREFLIGHT_UTIL))" 2>/dev/null) || continue
+    if (( free < need )); then
+      pct=$(python3 -c "print(round(100.0 * $free / $total, 1))")
+      echo "" >&2
+      echo "ERROR: GPU $idx doesn't have enough free memory to serve this model." >&2
+      echo "  Needs ~$((need / 1024)) GiB free (--gpu-memory-utilization $PREFLIGHT_UTIL of $((total / 1024)) GiB)," >&2
+      echo "  but only $((free / 1024)) GiB ($pct%) is free. Something else is using the card." >&2
+      echo "" >&2
+      echo "Fix one of:" >&2
+      echo "  1. Free the GPU (stop the process using it), or" >&2
+      echo "  2. Pin an unused card:  ./run.sh --gpu <index>" >&2
+      echo "     GPUs by free memory:" >&2
+      nvidia-smi --query-gpu=index,memory.free --format=csv,noheader 2>/dev/null \
+        | sort -t, -k2 -nr | sed 's/^/       /' | head -4 >&2
+      exit 1
+    fi
+  done
+}
+preflight_gpu_memory
+
 docker build -t "$IMAGE" .
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
