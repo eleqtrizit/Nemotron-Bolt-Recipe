@@ -44,8 +44,6 @@ RUN_ARGS=(docker run --name "$NAME"
 
 if [[ -n "$GPU" ]]; then
   RUN_ARGS+=(--gpus "\"$GPU\"")
-else
-  RUN_ARGS+=(--gpus all)
 fi
 
 if [[ -n "${RESTART:-}" ]]; then
