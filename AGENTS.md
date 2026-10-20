@@ -12,14 +12,16 @@ Intended to run under llama-swap (therefore `run.sh` stays in the foreground).
   as CMD. Entrypoint is `entrypoint.sh`, which runs `vllm download-kernels` at
   container start (it needs a GPU, so it cannot run during `docker build`).
 - `entrypoint.sh` — runs `vllm download-kernels`, then execs the CMD.
-- `run.sh` — builds the image, then runs the container in the foreground.
+- `run.sh` — builds the image, then runs the container (foreground by default).
+  Flags: `--port` (default 8080), `-d`, `--restart`, `--gpu`, `--kv-cache-dtype`.
 
 ## Usage
 
 ```bash
 ./run.sh             # serve on host port 8080 (default)
 ./run.sh --port 9000 # serve on host port 9000
-./run.sh -d --restart always  # detached + restart on container exit and daemon boot
+./run.sh -d --restart always           # detached + restart on container exit and daemon boot
+./run.sh --gpu "device=1"              # pin to the second GPU only
 ```
 
 Flags: `--port N`, `-d/--detach`, `--restart [always|unless-stopped|on-failure]`
@@ -38,8 +40,10 @@ docker exec vllm nvidia-smi            # container sees exactly one GPU (device 
 
 ## Key facts / gotchas
 
-- **GPU:** container is pinned to `--gpus '"device=1"'` (second GPU in nvidia-smi).
-  The card is 32 GB (31.36 GiB); inside the container it appears as `cuda:0`.
+- **GPU:** by default the container sees all GPUs. Pin one with
+  `--gpu "device=1"` (second GPU in nvidia-smi, the 32 GB / 31.36 GiB card the
+  config was tuned for; it appears as `cuda:0` inside the container). The KV
+  cache math below assumes that 32 GB card.
 - **Context length math:** the ~24GB quantized weights + CUDA graphs leave only
   ~2.6 GiB for KV cache. The original 262144 context needed 2.99 GiB and failed;
   vLLM's own estimate of the max was 175,344. Current values that work:
@@ -57,10 +61,16 @@ docker exec vllm nvidia-smi            # container sees exactly one GPU (device 
 - **Run from a shell you control:** `nohup ./run.sh &` from a sandboxed/short-lived
   shell will kill the container when the shell dies. For long-lived runs use a
   real terminal, systemd, or llama-swap itself.
-- **Debugging:** the container is removed on exit (`--rm`), so `docker logs` is
-  unavailable after a crash. Capture output instead:
-  `./run.sh > vllm.log 2>&1` (foreground) and inspect the file.
-- Host port is mapped `$PORT:8000`; vLLM binds `0.0.0.0:8000` inside the container.
+- **Debugging:** in the default foreground mode the container is removed on exit
+  (`--rm`), so `docker logs` is unavailable after a crash. Capture output instead:
+  `./run.sh > vllm.log 2>&1` and inspect the file. With `-d` (or `--restart`),
+  `docker logs vllm` works.
+- Host port is mapped `$PORT:8000`; vLLM binds `0.0.0.0:8000` inside the container
+  (explicit `--host 0.0.0.0 --port 8000` in the Dockerfile CMD).
+- **KV cache dtype:** fp8 by default; selectable at runtime via
+  `run.sh --kv-cache-dtype fp8|bf16|nvfp4` (entrypoint rewrites the CMD flag from
+  the `KV_CACHE_DTYPE` env var). bf16 doubles KV memory — drop `--max-model-len`
+  accordingly. See the NVFP4 section for why nvfp4 is currently blocked.
 
 ## Startup-phase log lines worth knowing
 
