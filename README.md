@@ -13,15 +13,35 @@ Designed to run under [llama-swap](https://github.com/mostlygeek/llama-swap), so
 ## Requirements
 
 - Docker with NVIDIA Container Toolkit
-- Two GPUs: the server is pinned to **GPU device 1** (the second GPU in `nvidia-smi`), which must have 32 GB VRAM (31.36 GiB)
+- A 32 GB GPU (31.36 GiB) — by default the container sees all GPUs; pin the right card with `./run.sh --gpu "device=N"`
 - ~25 GB free disk for weights (cached in `~/.cache`)
 
 ## Quick start
 
 ```bash
-./run.sh             # build image + serve on host port 8080 (default)
-./run.sh --port 9000 # serve on host port 9000 instead
+./run.sh                        # build image + serve on port 8080 (default), foreground
+
+# Port
+./run.sh --port 9000            # serve on host port 9000 instead
+./run.sh --port=9000            # same thing, `=` form
+
+# GPUs (no --gpus is passed by default; Docker exposes all GPUs)
+./run.sh --gpu "device=1"       # pin to the second GPU (the 32 GB card this config was tuned for)
+./run.sh --gpu "device=0"
+./run.sh --gpu all
+
+# Detached / restart-on-boot (llama-swap users: prefer the default foreground mode)
+./run.sh -d                     # run detached; logs via `docker logs -f vllm`
+./run.sh -d --restart always            # survive container crashes and daemon/host boots
+./run.sh -d --restart unless-stopped    # survive boots, but stays stopped after `docker stop`
+
+# KV cache dtype (fp8 is the default and the one tuned for this GPU)
+./run.sh --kv-cache-dtype fp8   # default, ~2.6 GiB KV for 160k context
+./run.sh --kv-cache-dtype bf16  # full precision; needs ~2x KV memory -> lower --max-model-len
+./run.sh --kv-cache-dtype nvfp4 # currently blocked upstream for this model (see README troubleshooting / AGENTS.md)
 ```
+
+The script builds the image (fast after the first time), then runs the container in the **foreground**. vLLM logs stream to stdout, so llama-swap or systemd can capture them.
 
 The script builds the image (fast after the first time), then runs the container in the **foreground**. vLLM logs stream to stdout, so llama-swap or systemd can capture them.
 
@@ -53,14 +73,15 @@ curl http://localhost:8080/v1/chat/completions \
 |------|---------|
 | `Dockerfile` | Based on `vllm/vllm-openai:nightly-77154ca6116ae34cbfe314beef1016bde9b63989`. Installs b12x, downloads the `ultra_v3_reasoning_parser.py` plugin (via python urllib — the base image has no wget/curl), and runs the full `vllm serve` command as CMD. |
 | `entrypoint.sh` | Container entrypoint: runs `vllm download-kernels` (needs a GPU, so it can't run at build time), then execs the CMD. |
-| `run.sh` | Builds the image, then `exec`s `docker run` in the foreground with `--rm`. Accepts `--port N`. |
+| `run.sh` | Builds the image, then `exec`s `docker run`. Default: foreground, `--rm`, all GPUs. Flags: `--port` (default 8080), `--gpu`, `-d`, `--restart` (drops `--rm`), `--kv-cache-dtype`. |
 
 ### Container settings
 
-- `--gpus '"device=1"'` — pinned to the second GPU; it appears as `cuda:0` inside the container
+- `--gpus` not passed by default (all GPUs visible); pass `--gpu "device=1"` to pin — the pinned GPU then appears as `cuda:0` inside the container
 - `--ipc=host` — shared memory for vLLM/torch
 - `-p $PORT:8000` — host `$PORT` → vLLM's `0.0.0.0:8000` inside the container
 - `-v ~/.cache:/root/.cache` — persists HF weights, compiled kernels, and torch artifacts across restarts
+- `--rm` — present in foreground mode, dropped when `--restart` is set (Docker forbids the combination)
 
 ## Server configuration that matters
 
@@ -79,7 +100,7 @@ curl http://localhost:8080/v1/chat/completions \
 | `[ERROR] vision_final_layernorm ... not documented` | Harmless transformers doc-lint warning, not a real error. |
 | Startup seems stuck, 0% GPU, no new logs | Normal — it's compiling (torch.compile / JIT / CUDA graph capture). Wait for `Application startup complete`. |
 | Container died and `docker logs` says "No such container" | The container runs with `--rm`, so it's removed on exit. Capture logs when running: `./run.sh > vllm.log 2>&1`. |
-| GPU 0 is being used instead of GPU 1 | Verify with `docker exec vllm nvidia-smi` — you should see exactly one GPU. |
+| Container sees too many/few GPUs | No `--gpus` is passed by default. Check with `docker exec vllm nvidia-smi`; pin with `./run.sh --gpu "device=1"`. |
 
 ## llama-swap integration
 
