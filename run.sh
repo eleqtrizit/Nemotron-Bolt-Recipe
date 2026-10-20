@@ -8,6 +8,7 @@ PORT=8080
 DETACH=0
 KV_CACHE_DTYPE=fp8
 GPU=""
+TP=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port) PORT="$2"; shift 2 ;;
@@ -15,6 +16,10 @@ while [[ $# -gt 0 ]]; do
     -d|--detach) DETACH=1; shift ;;
     --gpu|--gpu=*)
       if [[ "$1" == *=* ]]; then GPU="${1#*=}"; else GPU="$2"; shift; fi
+      shift
+      ;;
+    --tp|--tp=*)
+      if [[ "$1" == *=* ]]; then TP="${1#*=}"; else TP="$2"; shift; fi
       shift
       ;;
     --restart|--restart=*)
@@ -26,11 +31,21 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Usage: $0 [--port N] [-d] [--restart [always|unless-stopped|on-failure]] [--gpu "device=1"] [--kv-cache-dtype fp16|bf16|fp8|nvfp4]" >&2
+      echo "Usage: $0 [--port N] [-d] [--restart [always|unless-stopped|on-failure]] [--gpu "device=1"] [--tp N] [--kv-cache-dtype fp16|bf16|fp8|nvfp4]" >&2
       exit 1
       ;;
   esac
 done
+
+# Auto-detect GPU count: two+ GPUs with no explicit pin -> tensor parallelism 2
+if [[ -z "$TP" ]]; then
+  NGPU=$(nvidia-smi -L 2>/dev/null | rg -c 'GPU ' || true)
+  if [[ -n "$GPU" || "$NGPU" -lt 2 ]]; then
+    TP=1
+  else
+    TP=2
+  fi
+fi
 
 docker build -t "$IMAGE" .
 
@@ -40,7 +55,8 @@ RUN_ARGS=(docker run --name "$NAME"
   --ipc=host
   -p "$PORT:8000"
   -v ~/.cache:/root/.cache
-  -e KV_CACHE_DTYPE="$KV_CACHE_DTYPE")
+  -e KV_CACHE_DTYPE="$KV_CACHE_DTYPE"
+  -e TP="$TP")
 
 if [[ -n "$GPU" ]]; then
   RUN_ARGS+=(--gpus "\"$GPU\"")

@@ -13,7 +13,11 @@ Intended to run under llama-swap (therefore `run.sh` stays in the foreground).
   container start (it needs a GPU, so it cannot run during `docker build`).
 - `entrypoint.sh` — runs `vllm download-kernels`, then execs the CMD.
 - `run.sh` — builds the image, then runs the container (foreground by default).
-  Flags: `--port` (default 8080), `-d`, `--restart`, `--gpu`, `--kv-cache-dtype`.
+  Flags: `--port` (default 8080), `-d`, `--restart`, `--gpu`, `--tp`, `--kv-cache-dtype`.
+Tensor-parallelism auto-detection: if the host has 2+ GPUs and no `--gpu` pin is
+given, `run.sh` sets TP=2 and exposes all GPUs; otherwise TP=1. Override with
+`--tp N`. The TP value reaches the server via the `TP` env var, rewritten into
+the CMD by entrypoint.sh (same mechanism as KV_CACHE_DTYPE).
 
 ## Usage
 
@@ -50,7 +54,8 @@ docker exec vllm nvidia-smi            # container sees exactly one GPU (device 
   vLLM's own estimate of the max was 175,344. Current values that work:
   `--max-model-len 163840` (160k) + `--gpu-memory-utilization 0.96`.
   Do not raise max-model-len back to 262144 on one 32 GB GPU. Alternatives if
-  more context is needed: `--tensor-parallel-size 2` across both GPUs.
+  more context is needed: `--tensor-parallel-size 2` across both GPUs (run.sh
+does this automatically when it sees 2+ GPUs and no `--gpu` pin).
 - **0.98 gpu-memory-utilization fails**: the card only has 30.37 GiB free at
   startup; vLLM refuses requests above that. 0.96 is the working value.
 - **First startup is slow (10–30 min):** weights load, then torch.compile,

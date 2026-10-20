@@ -25,10 +25,12 @@ Designed to run under [llama-swap](https://github.com/mostlygeek/llama-swap), so
 ./run.sh --port 9000            # serve on host port 9000 instead
 ./run.sh --port=9000            # same thing, `=` form
 
-# GPUs (no --gpus is passed by default; Docker exposes all GPUs)
-./run.sh --gpu "device=1"       # pin to the second GPU (the 32 GB card this config was tuned for)
+# GPUs / tensor parallelism (auto: 2+ GPUs and no pin -> TP=2 across them)
+./run.sh --gpu "device=1"       # pin to the second GPU, TP=1 (the 32 GB card this config was tuned for)
 ./run.sh --gpu "device=0"
 ./run.sh --gpu all
+./run.sh --tp 1 --gpu all       # force single-GPU tensor parallelism
+./run.sh --tp 2                 # force 2-way tensor parallelism
 
 # Detached / restart-on-boot (llama-swap users: prefer the default foreground mode)
 ./run.sh -d                     # run detached; logs via `docker logs -f vllm`
