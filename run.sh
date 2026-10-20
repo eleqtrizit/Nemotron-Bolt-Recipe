@@ -42,8 +42,8 @@ Options:
   -d, --detach            Run detached; logs via 'docker logs -f vllm'.
   --restart [POLICY]      Docker restart policy: always, unless-stopped, on-failure.
                           Default unless-stopped. Disables --rm (Docker forbids both).
-  --gpu SPEC              Pin GPUs, e.g. "device=1" or "all". Default: no --gpus flag
-                          (container sees all GPUs).
+  --gpu SPEC              Pin GPUs, e.g. "device=1" or "all". Default: all GPUs
+                          (docker run gives NO GPUs unless --gpus is passed).
   --tp N                  Tensor parallelism. Default: auto -- 2 when the host has
                           2+ GPUs and no --gpu pin is given, otherwise 1.
   --kv-cache-dtype DTYPE  fp8 (default), bf16, nvfp4. nvfp4 is blocked upstream for
@@ -67,13 +67,17 @@ USAGE
   esac
 done
 
-# Auto-detect GPU count: two+ GPUs with no explicit pin -> tensor parallelism 2
+# Auto-detect GPU count: two+ GPUs with no explicit pin -> tensor parallelism 2.
+# NOTE: docker run without --gpus exposes NO GPUs (unless nvidia is the default
+# runtime), so "all GPUs" must be passed explicitly whenever no pin is given.
 if [[ -z "$TP" ]]; then
-  NGPU=$(nvidia-smi -L 2>/dev/null | rg -c 'GPU ' || true)
-  if [[ -n "$GPU" || "$NGPU" -lt 2 ]]; then
+  NGPU=$(nvidia-smi -L 2>/dev/null | grep -c 'GPU ' || true)
+  if [[ -n "$GPU" ]]; then
     TP=1
-  else
+  elif [[ "$NGPU" -ge 2 ]]; then
     TP=2
+  else
+    TP=1
   fi
 fi
 
@@ -90,6 +94,8 @@ RUN_ARGS=(docker run --name "$NAME"
 
 if [[ -n "$GPU" ]]; then
   RUN_ARGS+=(--gpus "\"$GPU\"")
+else
+  RUN_ARGS+=(--gpus all)
 fi
 
 if [[ -n "${RESTART:-}" ]]; then

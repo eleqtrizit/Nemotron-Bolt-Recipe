@@ -44,11 +44,12 @@ docker exec vllm nvidia-smi            # container sees exactly one GPU (device 
 
 ## Key facts / gotchas
 
-- **GPU:** no `--gpus` flag is passed by default (Docker gives the container
-  access to all GPUs). Pin one with `--gpu "device=1"` (second GPU in
-  nvidia-smi, the 32 GB / 31.36 GiB card the config was tuned for; it appears
-  as `cuda:0` inside the container). The KV cache math below assumes that
-  32 GB card.
+- **GPU:** `--gpus all` is passed by default — `docker run` without any
+  `--gpus` flag gives the container NO GPUs (the nvidia runtime must be the
+  daemon default otherwise, and it typically is not). Pin one card with
+  `--gpu "device=1"` (second GPU in nvidia-smi, the 32 GB / 31.36 GiB card the
+  config was tuned for; it appears as `cuda:0` inside the container). The KV
+  cache math below assumes that 32 GB card.
 - **Context length math:** the ~24GB quantized weights + CUDA graphs leave only
   ~2.6 GiB for KV cache. The original 262144 context needed 2.99 GiB and failed;
   vLLM's own estimate of the max was 175,344. Current values that work:
