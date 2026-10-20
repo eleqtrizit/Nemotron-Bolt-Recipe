@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Always operate from the repo dir: docker build uses a relative context, and
+# callers like llama-swap launch this script from their own cwd.
+cd "$(dirname "$(readlink -f "$0")")"
+
 IMAGE=bolt-vllm-nemotron
 NAME=vllm
 
