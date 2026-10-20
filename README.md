@@ -143,3 +143,14 @@ Rough takeaways:
 - `--rm` avoids stale-container name conflicts on restart
 
 Point llama-swap at `./run.sh --port <port>` and probe `http://localhost:<port>/v1/models` for readiness. Give it a generous startup timeout (e.g. `startup_seconds: 2400`) for the first cold start.
+
+## Tests
+
+```bash
+tests/run-tests.sh    # run unattended; prints PASS/FAIL per step, exits non-zero on failure
+```
+
+Starts the server for each GPU scenario (single GPU 0; GPU 1 and dual `--gpu 0,1`
+when 2+ GPUs are present), waits for readiness, checks `/v1/models`, and asserts
+via `nvidia-smi` that the serving GPU is actually loaded (>50% VRAM). Tears down
+between tests. Full suite takes ~10–15 minutes on warm caches (up to ~30 min cold).
