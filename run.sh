@@ -73,6 +73,19 @@ if [[ "$GPU" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
   GPU="device=$GPU"
 fi
 
+# Guard: multi-GPU specs cannot be served by this checkpoint (TP=2 fails at
+# model load: IQ2_XXS dense weights can't be sharded — see AGENTS.md). Fail
+# fast here instead of 2 minutes into engine init.
+if [[ "$GPU" == device=* && "$GPU" == *,* ]]; then
+  echo "" >&2
+  echo "ERROR: serving this model on multiple GPUs (--gpu $GPU) is not supported." >&2
+  echo "  The checkpoint's IQ2_XXS-quantized dense weights cannot be split across" >&2
+  echo "  GPUs: with --tp 2 model load fails with 'IQ2_XXS dense weights require" >&2
+  echo "  BF16, K256 and N8'. One GPU holds all ~24GB of weights; TP=1 is the only" >&2
+  echo "  working mode. Pin a single card instead: ./run.sh --gpu <index>" >&2
+  exit 1
+fi
+
 # Default: expose all GPUs. docker run gives NO GPUs without --gpus.
 GPU="${GPU:-all}"
 

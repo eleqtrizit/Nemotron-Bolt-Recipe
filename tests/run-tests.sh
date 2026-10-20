@@ -98,6 +98,8 @@ run_test() { # $1 = test name, rest = run.sh args
     pass "$name: server came online"
   else
     fail "$name: server did not come online within ${STARTUP_TIMEOUT}s"
+    # engine error lives in docker logs when detached; capture before teardown
+    docker logs vllm >> "$log" 2>&1
     tail -10 "$log" | info; teardown; return 1
   fi
 
@@ -133,11 +135,16 @@ if (( NGPU >= 2 )); then
   MEMCHECK=(1)
   run_test "single-gpu-1" --gpu 1
 
-  ### Test 3: GPUs 0,1 (dual exposure)
-  MEMCHECK=(0)
-  run_test "dual-gpu-0-1" --gpu 0,1
-  # informational: with TP=1 only cuda:0 (=GPU 0) should be loaded
-  info "note: --gpu 0,1 with TP=1 loads only the primary (GPU 0); GPU 1 usage above is informational"
+  ### Test 3: multi-GPU spec is rejected with a clear error (checkpoint limitation)
+  LOG="$LOGDIR/multi-gpu-rejected.log"
+  if ( cd "$REPO_DIR" && ./run.sh -d --port "$PORT" --gpu 0,1 > "$LOG" 2>&1 ); then
+    fail "multi-gpu-rejected: run.sh should have refused --gpu 0,1"
+  elif grep -q 'not supported' "$LOG"; then
+    pass "multi-gpu-rejected: run.sh refuses multi-GPU with a clear error"
+  else
+    fail "multi-gpu-rejected: run.sh failed but without the expected message"
+    tail -5 "$LOG" | info
+  fi
 else
   echo ""
   echo "SKIP: GPU-1 and dual-GPU tests (host has only 1 GPU)"
@@ -146,6 +153,5 @@ fi
 echo ""
 echo "======================================"
 echo "RESULTS: $PASS passed, $FAIL failed"
-echo "======================================"
 (( FAIL == 0 )) || exit 1
 exit 0

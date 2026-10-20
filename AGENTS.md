@@ -54,9 +54,11 @@ docker exec vllm nvidia-smi            # container sees exactly one GPU (device 
   services on this machine). Override with `--gpu "device=1"`. Historically
   the serving card is the second GPU (32 GB / 31.36 GiB, `cuda:0` inside the
   container); the KV cache math below assumes that card.
-- **TP=2 does not work with this checkpoint:** model load fails with
-  `IQ2_XXS dense weights require BF16, K256 and N8` (mixed-precision dense
-  weights can't be sharded). `--tp 2` remains opt-in for future tests.
+- **One GPU only, by checkpoint design:** the IQ2_XXS-quantized dense weights
+  cannot be TP-sharded (`IQ2_XXS dense weights require BF16, K256 and N8` at
+  model load), so `run.sh` refuses multi-GPU `--gpu` specs up front (e.g.
+  `--gpu 0,1`) with a clear error. `--tp 2` remains opt-in for future
+  kernel/checkpoint updates. `--gpus all` still works: TP=1 uses cuda:0 only.
 - **Context length math:** the ~24GB quantized weights + CUDA graphs leave only
   ~2.6 GiB for KV cache. The original 262144 context needed 2.99 GiB and failed;
   vLLM's own estimate of the max was 175,344. Current values that work:

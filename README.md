@@ -27,7 +27,8 @@ Designed to run under [llama-swap](https://github.com/mostlygeek/llama-swap), so
 
 # GPUs (default: --gpus all; docker gives no GPUs without an explicit --gpus)
 ./run.sh --gpu 1                # pin to GPU index 1 (the 32 GB card this config was tuned for)
-./run.sh --gpu 0,1              # expose two GPUs by index
+./run.sh --gpu 0,1              # NOT supported: checkpoint can't be TP-sharded
+                                # (run.sh errors clearly; one GPU holds all weights)
 ./run.sh --gpu all              # pass a docker --gpus spec; "device=1" also accepted
 ./run.sh --tp 2                 # tensor parallelism (NOT supported by this checkpoint, see below)
 
