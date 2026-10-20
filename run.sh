@@ -43,8 +43,7 @@ Options:
   --restart [POLICY]      Docker restart policy: always, unless-stopped, on-failure.
                           Default unless-stopped. Disables --rm (Docker forbids both).
   --gpu SPEC              GPUs to expose: bare indices ("0", "0,1") or a docker
-                          --gpus spec ("device=1", "all"). Default: the single GPU
-                          with the most free memory.
+                          --gpus spec ("device=1", "all"). Default: all.
   --tp N                  Tensor parallelism. Default 1. TP=2 is NOT supported by
                           this checkpoint (IQ2_XXS dense weights); opt-in for tests.
   --kv-cache-dtype DTYPE  fp8 (default), bf16, nvfp4. nvfp4 is blocked upstream for
@@ -52,9 +51,9 @@ Options:
   -h, --help              Show this help.
 
 Examples:
-  ./run.sh                          # foreground, port 8080, TP auto-detected
+  ./run.sh                          # foreground, port 8080, all GPUs, TP=1
   ./run.sh --port 9000              # different host port
-  ./run.sh --gpu "device=1"         # pin to second GPU, TP=1
+  ./run.sh --gpu 1                  # pin to second GPU, TP=1
   ./run.sh -d --restart always      # detached, restart on crash and daemon boot
   ./run.sh --kv-cache-dtype bf16    # full-precision KV (needs lower max-model-len)
 USAGE
@@ -68,19 +67,8 @@ USAGE
   esac
 done
 
-# Auto-detect GPU count: two+ GPUs with no explicit pin -> tensor parallelism 2.
-# NOTE: docker run without --gpus exposes NO GPUs (unless nvidia is the default
-# runtime), so "all GPUs" must be passed explicitly whenever no pin is given.
-if [[ -z "$TP" ]]; then
-  NGPU=$(nvidia-smi -L 2>/dev/null | grep -c 'GPU ' || true)
-  if [[ -n "$GPU" ]]; then
-    TP=1
-  elif [[ "$NGPU" -ge 2 ]]; then
-    TP=2
-  else
-    TP=1
-  fi
-fi
+# Default: expose all GPUs. docker run gives NO GPUs without --gpus.
+GPU="${GPU:-all}"
 
 docker build -t "$IMAGE" .
 
