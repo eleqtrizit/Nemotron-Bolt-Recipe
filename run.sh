@@ -67,17 +67,27 @@ USAGE
   esac
 done
 
+# Normalize --gpu: bare indices ("0", "0,1") become docker "device=..." specs;
+# anything else ("device=1", "all") passes through untouched.
+if [[ "$GPU" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+  GPU="device=$GPU"
+fi
+
 # Default: expose all GPUs. docker run gives NO GPUs without --gpus.
 GPU="${GPU:-all}"
+
+# TP defaults to 1: the checkpoint's IQ2_XXS dense weights cannot be sharded
+# (see AGENTS.md). Opt-in via --tp 2 for future tests.
+TP="${TP:-1}"
 
 # Pre-flight: refuse to start when the serving GPU(s) can't satisfy the
 # gpu-memory-utilization baked into the Dockerfile (default 0.96), instead of
 # dying 2 minutes into engine init with a cryptic ValueError.
-PREFLIGHT_UTIL=$(grep -oE 'gpu-memory-utilization", "[0-9.]+' Dockerfile | rg -o '[0-9.]+$')
+PREFLIGHT_UTIL=$(grep -oE 'gpu-memory-utilization", "[0-9.]+' Dockerfile | grep -oE '[0-9.]+$')
 PREFLIGHT_UTIL="${PREFLIGHT_UTIL:-0.96}"
 preflight_gpu_memory() {
   command -v nvidia-smi >/dev/null 2>&1 || return 0
-  [[ "$GPU" == "all" ]] && GPU_LIST=$(nvidia-smi -L 2>/dev/null | rg -o -P 'GPU \K[0-9]+' | tr '
+  [[ "$GPU" == "all" ]] && GPU_LIST=$(nvidia-smi -L 2>/dev/null |  grep -oP 'GPU \K[0-9]+' | tr '
 ' ',' | sed 's/,$//') || GPU_LIST="${GPU#device=}"
   [[ -z "$GPU_LIST" ]] && return 0
   # TP=1 only uses the first visible GPU as cuda:0; TP>1 uses them all
