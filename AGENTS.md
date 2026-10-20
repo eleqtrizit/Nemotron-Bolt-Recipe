@@ -95,6 +95,13 @@ does this automatically when it sees 2+ GPUs and no `--gpu` pin).
   utilization` — some other process is using the GPU; lower `gpu-memory-utilization`.
 - Docs/config lint lines like `[ERROR] vision_final_layernorm ... not documented`
   are harmless transformers warnings, not real errors.
+- Triton cubin reload warnings ("Cubin file saved by TritonBundler not found")
+  used to appear on every restart because torch inductor cached to the
+  container's ephemeral /tmp. Fixed permanently via
+  `TORCHINDUCTOR_CACHE_DIR=/root/.cache/torchinductor` and
+  `TRITON_CACHE_DIR=/root/.cache/triton` env vars in the Dockerfile (both land
+  on the persistent ~/.cache mount). If they ever reappear, check that these
+  env vars are still set.
 
 ## NVFP4 KV cache — BLOCKED upstream (tested 2026-10-20)
 

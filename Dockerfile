@@ -7,7 +7,9 @@ RUN chmod +x /entrypoint.sh
 
 RUN python3 -c "from urllib.request import urlretrieve; urlretrieve('https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB/resolve/main/ultra_v3_reasoning_parser.py', '/ultra_v3_reasoning_parser.py')"
 
-ENV VLLM_USE_V2_MODEL_RUNNER=1
+ENV VLLM_USE_V2_MODEL_RUNNER=1 \
+    TORCHINDUCTOR_CACHE_DIR=/root/.cache/torchinductor \
+    TRITON_CACHE_DIR=/root/.cache/triton
 
 EXPOSE 8000
 
